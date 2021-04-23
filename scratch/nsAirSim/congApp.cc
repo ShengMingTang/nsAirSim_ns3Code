@@ -63,6 +63,8 @@ void CongApp::StartApplication(void)
         MakeCallback(&CongApp::recvCallback, this)
     );
 
+    scheduleTx();
+    
     NS_LOG_INFO("[Cong " << m_name << " starts]");
 }
 void CongApp::StopApplication(void)
