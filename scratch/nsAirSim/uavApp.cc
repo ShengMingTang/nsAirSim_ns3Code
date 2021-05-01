@@ -62,7 +62,7 @@ void UavApp::Setup(zmq::context_t &context, Ptr<Socket> socket, Address myAddres
 
     m_zmqSocketSend = zmq::socket_t(context, ZMQ_PUSH);
     m_zmqSocketSend.bind("tcp://*:" + to_string(zmqSendPort));
-    m_zmqSocketRecv = zmq::socket_t(context, ZMQ_PULL);
+    m_zmqSocketRecv = zmq::socket_t(context, ZMQ_REP);
     m_zmqSocketRecv.connect("tcp://localhost:" + to_string(zmqRecvPort));
 }
 
@@ -126,6 +126,9 @@ void UavApp::scheduleTx(void)
     double now = Simulator::Now().GetSeconds();
     zmq::recv_result_t res;
 
+    zmq::message_t rep(1);
+    int repRes = -1;
+
     if(!m_running){
         return;
     }
@@ -136,21 +139,15 @@ void UavApp::scheduleTx(void)
 
     res = m_zmqSocketRecv.recv(message, zmq::recv_flags::dontwait);
     while(res.has_value() && res.value() != -1){ // EAGAIN
-        std::string smessage(static_cast<char*>(message.data()), message.size());
-        std::stringstream ss(smessage);
-        double simTime;
-        std::string payload;
+        const uint8_t *payload = NULL;
 
-        ss >> simTime;
-        payload = ss.str();
+        payload = (const uint8_t*)message.data();
+        Ptr<Packet> packet = Create<Packet>((const uint8_t*)payload, message.size());
+        repRes = m_socket->Send(packet);
 
-        Ptr<Packet> packet = Create<Packet>((const uint8_t*)(payload.c_str()), payload.length()+1);
-
-        Time tNext(Seconds(max(0.0, simTime - now)));
-        EventId event = Simulator::Schedule(tNext, &UavApp::Tx, this, m_socket, payload);
-        m_events.push(event);
-        
-        NS_LOG_INFO("time: " << simTime << ", [" << m_name << " send " << payload.length() << " bytes]");
+        *(unsigned uint8_t*)rep.data() = repRes;
+        m_zmqSocketRecv.send(rep, zmq::send_flags::dontwait);
+        NS_LOG_INFO("time: " << now << " " << m_name << " sends " << repRes << " bytes");
 
         message.rebuild();
         res = m_zmqSocketRecv.recv(message, zmq::recv_flags::dontwait);
@@ -167,6 +164,5 @@ void UavApp::recvCallback(Ptr<Socket> socket)
     zmq::message_t message(packet->GetSize());
     packet->CopyData((uint8_t *)message.data(), packet->GetSize());
     m_zmqSocketSend.send(message, zmq::send_flags::none);
-    // NS_LOG_INFO("time: " << now << ", [" << m_name << " recv] " << packet->GetSize() << " bytes");
     NS_LOG_INFO("time: " << now << ", [" << m_name << " recv]: " << (const char*)message.data());
 }

@@ -10,10 +10,6 @@
 // custom includes
 #include "congApp.h"
 
-// #include "AirSimSync.h"
-// externs
-// extern AirSimSync::NetConfig config;
-
 using namespace std;
 using namespace ns3;
 
@@ -91,9 +87,9 @@ void CongApp::scheduleTx(void)
     float r = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
     r = rand() % 2 ? r : -r;
 
-    Ptr<Packet> packet = Create<Packet>(1400);
+    Ptr<Packet> packet = Create<Packet>(m_congRate*1024);
 
-    Time tNext(Seconds(max((float)0.1, 1/m_congRate + r)));
+    Time tNext(Seconds(max((float)1e-3, 1/m_congRate + r)));
     m_event = Simulator::Schedule(tNext, &CongApp::Tx, this, m_socket, packet);
     NS_LOG_INFO("time: " << now << ", [" << m_name << " send]");
 }

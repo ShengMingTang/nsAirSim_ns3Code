@@ -30,34 +30,37 @@
 using namespace std;
 using namespace ns3;
 
-static int nRbs = 6; // see https://i.imgur.com/q55uR8T.png
-AirSimSync::NetConfig config;
-
 NS_LOG_COMPONENT_DEFINE ("NS_AIRSIM");
+
+static int nRbs = 6; // see https://i.imgur.com/q55uR8T.png
+static uint TcpSndBufSize = 429496729;
+static uint TcpRcvBufSize = 429496729;
+static uint CqiTimerThreshold = 10;
+static double LteTxPower = 0;
+static bool useWifi = false;
+static std::string p2pDataRate("1Gb/s");
+static uint p2pMtu = 1500;
+static double p2pDelay = 1e-3; 
+
+NetConfig config;
 
 int main(int argc, char *argv[])
 {
   // local vars
   zmq::context_t context(1);
-  float dist;
-
-
   srand (static_cast <unsigned> (time(0)));
-  LogComponentEnable("NS_AIRSIM", LOG_LEVEL_INFO);
-  // LogComponentEnable("GcsApp", LOG_LEVEL_INFO);
-  // LogComponentEnable("UavApp", LOG_LEVEL_INFO);
-  // LogComponentEnable("CongApp", LOG_LEVEL_INFO);
-  // LogComponentEnable("AIRSIM_SYNC", LOG_LEVEL_INFO);
-  
-  CommandLine cmd (__FILE__);
-  cmd.AddValue("dist", "dist", dist);
 
+  CommandLine cmd (__FILE__);
   cmd.Parse (argc, argv);
-  
-  NS_LOG_INFO("Read Net config");
 
   AirSimSync sync(context);
   sync.readNetConfigFromAirSim(config);
+
+  if(config.isMainLogEnabled) {LogComponentEnable("NS_AIRSIM", LOG_LEVEL_INFO);}
+  if(config.isGcsLogEnabled) {LogComponentEnable("GcsApp", LOG_LEVEL_INFO);}
+  if(config.isUavLogEnabled) {LogComponentEnable("UavApp", LOG_LEVEL_INFO);}
+  if(config.isCongLogEnabled) {LogComponentEnable("CongApp", LOG_LEVEL_INFO);}
+  if(config.isSyncLogEnabled) {LogComponentEnable("AIRSIM_SYNC", LOG_LEVEL_INFO);}
   NS_LOG_INFO(config);
 
   Time::SetResolution(Time::NS);
@@ -67,8 +70,8 @@ int main(int argc, char *argv[])
   // Config TCP socket
   // https://www.nsnam.org/doxygen/classns3_1_1_tcp_socket.html
   Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(config.segmentSize));
-  Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(429496729));
-  Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(429496729));
+  Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(TcpSndBufSize));
+  Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(TcpRcvBufSize));
 
   
   // Packet level settings
@@ -112,12 +115,12 @@ int main(int argc, char *argv[])
   Config::SetDefault ("ns3::LteSpectrumPhy::CtrlErrorModelEnabled", BooleanValue (false));
   Config::SetDefault ("ns3::LteSpectrumPhy::DataErrorModelEnabled", BooleanValue (true));
   Config::SetDefault ("ns3::PfFfMacScheduler::HarqEnabled", BooleanValue (false));
-  Config::SetDefault ("ns3::PfFfMacScheduler::CqiTimerThreshold", UintegerValue (10));
+  Config::SetDefault ("ns3::PfFfMacScheduler::CqiTimerThreshold", UintegerValue (CqiTimerThreshold));
   Config::SetDefault ("ns3::LteEnbRrc::EpsBearerToRlcMapping",EnumValue(LteEnbRrc::RLC_AM_ALWAYS));
   Config::SetDefault ("ns3::LteEnbNetDevice::UlBandwidth", UintegerValue(nRbs));
   Config::SetDefault ("ns3::LteEnbNetDevice::DlBandwidth", UintegerValue(nRbs));
   Config::SetDefault ("ns3::LteUePhy::EnableUplinkPowerControl", BooleanValue (false));
-  Config::SetDefault ("ns3::LteUePhy::TxPower", DoubleValue(0));
+  Config::SetDefault ("ns3::LteUePhy::TxPower", DoubleValue(LteTxPower));
 
   NS_LOG_INFO("Setup LTE helper");
   Ptr<LteHelper> lteHelper = CreateObject<LteHelper>();
@@ -140,9 +143,9 @@ int main(int argc, char *argv[])
   
   // EPC
   PointToPointHelper p2ph;
-  p2ph.SetDeviceAttribute ("DataRate", DataRateValue (DataRate ("1Gb/s")));
-  p2ph.SetDeviceAttribute ("Mtu", UintegerValue (1500));
-  p2ph.SetChannelAttribute ("Delay", TimeValue (Seconds (0.00001)));
+  p2ph.SetDeviceAttribute ("DataRate", DataRateValue (DataRate (p2pDataRate.c_str())));
+  p2ph.SetDeviceAttribute ("Mtu", UintegerValue (p2pMtu));
+  p2ph.SetChannelAttribute ("Delay", TimeValue (Seconds (p2pDelay)));
   
   NetDeviceContainer pgwRemoteDevices = p2ph.Install (pgw, remoteHost);
   Ipv4AddressHelper ipv4h;
@@ -294,8 +297,8 @@ int main(int argc, char *argv[])
 
   // ==========================================================================
   // measure
-  enableThroughPutMeasure("nsAirSim_throughput.csv", gcsNode, uavNodes, config.uavsName);
-  enableMobilityMeasure("nsAirSim_mobility.csv", uavNodes, config.uavsName);
+  // enableThroughPutMeasure("nsAirSim_throughput.csv", gcsNode, uavNodes, config.uavsName);
+  // enableMobilityMeasure("nsAirSim_mobility.csv", uavNodes, config.uavsName);
 
   FlowMonitorHelper flowmon;
   Ptr<FlowMonitor> monitor = flowmon.Install(gcsNode);
@@ -304,27 +307,16 @@ int main(int argc, char *argv[])
   // Run
   sync.startAirSim();
   Simulator::ScheduleNow(&AirSimSync::takeTurn, &sync, gcsApp, uavsApp);
-  Simulator::Stop(Seconds(1.99));
+  // Simulator::Stop(Seconds(1.99));
   Simulator::Run();
   
   // ==========================================================================
-  // post
-  // std::cout << ueIpIfaces.GetN() << endl;
-  // for(int i = 0; i < ueIpIfaces.GetN(); i++){
-      // NS_LOG_INFO("UAV address = "  << ueIpIfaces.GetAddress(i));
-  // }
-  // NS_LOG_INFO("GCS address = "  << remoteHostAddr);
-  
   monitor->CheckForLostPackets ();
   Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
   FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
   for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i){
     Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
-    std::cout << "dist=" << dist << " source=" << t.sourceAddress << ", dest=" << t.destinationAddress << ", throughput= "<< i->second.txBytes * 8.0 / (i->second.timeLastTxPacket.GetSeconds() - i->second.timeFirstTxPacket.GetSeconds()+0.001) / 1000 / 1000  << " Mbps"  << endl;
-
-    // sender
-    // if(t.sourceAddress == ueIpIfaces.GetAddress(0)){
-    // }
+    std::cout << "source=" << t.sourceAddress << ", dest=" << t.destinationAddress << ", throughput= "<< i->second.txBytes * 8.0 / (i->second.timeLastTxPacket.GetSeconds() - i->second.timeFirstTxPacket.GetSeconds()+0.001) / 1000 / 1000  << " Mbps"  << endl;
   }
 
   // ==========================================================================

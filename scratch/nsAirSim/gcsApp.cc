@@ -61,7 +61,7 @@ void GcsApp::Setup (zmq::context_t &context, Ptr<Socket> socket, Address address
 
     m_zmqSocketSend = zmq::socket_t(context, ZMQ_PUSH);
     m_zmqSocketSend.bind("tcp://*:" + to_string(zmqSendPort));
-    m_zmqSocketRecv = zmq::socket_t(context, ZMQ_PULL);
+    m_zmqSocketRecv = zmq::socket_t(context, ZMQ_REP);
     m_zmqSocketRecv.connect("tcp://localhost:" + to_string(zmqRecvPort));
 
     try{
@@ -130,6 +130,9 @@ void GcsApp::scheduleTx(void)
     zmq::message_t message;
     double now = Simulator::Now().GetSeconds();
     zmq::recv_result_t res;
+    
+    zmq::message_t rep(1);
+    int repRes = -1;
 
     if(!m_running){
         return;
@@ -141,24 +144,26 @@ void GcsApp::scheduleTx(void)
 
     res = m_zmqSocketRecv.recv(message, zmq::recv_flags::dontwait);
     while(res.has_value() && res.value() != -1){ // EAGAIN
-        std::string smessage(static_cast<char*>(message.data()), message.size());
-        std::stringstream ss(smessage);
-        double simTime;
+        std::size_t head;
         std::string name;
-        std::string payload;
+        const uint8_t *payload = NULL;
 
-        ss >> simTime >> name >> payload;
+        head = message.to_string().find(' ');
+        name = message.to_string().substr(0, head);
+        payload = (const uint8_t*)message.data() + head + 1;
 
         if(m_connectedSockets.find(name) != m_connectedSockets.end()){
-            Ptr<Packet> packet = Create<Packet>((const uint8_t*)(payload.c_str()), payload.size()+1);
-            Time tNext(Seconds(max(0.0, simTime - now)));
-            EventId event = Simulator::Schedule(tNext, &GcsApp::Tx, this, m_connectedSockets[name], packet);
-            m_events.push(event);
-            NS_LOG_INFO("time: " << simTime << ", [GCS send] to " << name << " " << packet->GetSize() << " bytes");
+            Ptr<Packet> packet = Create<Packet>((const uint8_t*)payload, message.size()-(payload - (const uint8_t*)message.data()));
+            repRes = m_connectedSockets[name]->Send(packet);
+
+            NS_LOG_INFO("time: " << now << ", [GCS send] to " << name << " " << packet->GetSize() << " bytes");
         }
         else{
-            NS_LOG_WARN("[GCS drop] a packet supposed to be sent to " << name);
+            NS_FATAL_ERROR("[GCS drop] a packet supposed to be sent to " << name);
         }
+        *(unsigned uint8_t*)rep.data() = repRes;
+        m_zmqSocketRecv.send(rep, zmq::send_flags::dontwait);
+
         message.rebuild();
         res = m_zmqSocketRecv.recv(message, zmq::recv_flags::dontwait);
     }
@@ -177,10 +182,10 @@ void GcsApp::recvCallback(Ptr<Socket> socket)
     zmq::message_t message(packet->GetSize());
     packet->CopyData((uint8_t *)message.data(), packet->GetSize());
 
+    /* @@ We may leave the job to application */
     pos = message.to_string().find("name");
-    
     if(pos != std::string::npos){
-        std::stringstream ss(message.to_string().substr(pos));
+        std::stringstream ss(message.to_string());
         std::string name;
         ss >> name;
         ss >> name;
@@ -196,12 +201,16 @@ void GcsApp::recvCallback(Ptr<Socket> socket)
     }
     else{
         // forward to application code
-        std::stringstream ss;
-        std::string s;
-        ss << from << " " << (const char*)message.data();
-        s = ss.str();
-        zmq::message_t message(s.begin(), s.end());
-        
+        std::string name = m_uavsAddress2Name[from];
+        std::size_t sz = name.size() + 1 + packet->GetSize();
+        zmq::message_t message(sz);
+        uint8_t *p = (uint8_t*)message.data();
+        memcpy(p, name.c_str(), name.size());
+        p += name.size();
+        *p = ' ';
+        p++;
+
+        packet->CopyData(p, packet->GetSize());
         m_zmqSocketSend.send(message, zmq::send_flags::none);
         NS_LOG_INFO("time: " << now << ", [GCS recv] from-" << m_uavsAddress2Name[from] << ", " << packet->GetSize() << " bytes");
     }
@@ -212,7 +221,7 @@ void GcsApp::acceptCallback(Ptr<Socket> s, const Address& from)
     // connected uavs must send their name first
     s->SetRecvCallback (MakeCallback (&GcsApp::recvCallback, this));
     m_socketSet.insert(s);
-    NS_LOG_INFO("Time: " << Simulator::Now().GetSeconds() << " [GCS accept] from " << from << " with socket " << s);
+    NS_LOG_INFO("Time: " << Simulator::Now().GetSeconds() << " [GCS accept] from " << from);
 }
 void GcsApp::peerCloseCallback(Ptr<Socket> socket)
 {

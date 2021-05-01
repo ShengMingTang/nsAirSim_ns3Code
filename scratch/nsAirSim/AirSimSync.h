@@ -10,16 +10,6 @@
 #include "ns3/point-to-point-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/stats-module.h"
-// AirSim includes
-#include "common/common_utils/StrictMode.hpp"
-STRICT_MODE_OFF
-#ifndef RPCLIB_MSGPACK
-#define RPCLIB_MSGPACK clmdep_msgpack
-#endif // !RPCLIB_MSGPACK
-#include "rpc/rpc_error.h"
-STRICT_MODE_ON
-#include "vehicles/multirotor/api/MultirotorRpcLibClient.hpp"
-#include "common/common_utils/FileSystem.hpp"
 // zmq includes
 #include <zmq.hpp>
 // custom includes
@@ -51,20 +41,29 @@ extern zmq::context_t context;
 
 using namespace std;
 
+struct NetConfig
+{
+    int nzmqIOthread;
+    int numOfCong;
+    float congRate;
+    float congX, congY, congRho;
+    std::vector< std::vector<float> > initPostEnb;
+    int segmentSize;
+    std::vector<string> uavsName;
+    float updateGranularity;
+    
+    int useWifi;
+    // NS logging
+    int isMainLogEnabled;
+    int isGcsLogEnabled;
+    int isUavLogEnabled;
+    int isCongLogEnabled;
+    int isSyncLogEnabled;
+};
+
 class AirSimSync
 {
 public:
-    struct NetConfig
-    {
-        int nzmqIOthread;
-        int numOfCong;
-        float congRate;
-        float congX, congY, congRho;
-        std::vector< std::vector<float> > initPostEnb;
-        int segmentSize;
-        std::vector<string> uavsName;
-        float updateGranularity;
-    };
     AirSimSync(zmq::context_t &context);
     ~AirSimSync();
     void readNetConfigFromAirSim(NetConfig &config);
@@ -75,12 +74,6 @@ private:
     float updateGranularity;
     EventId event;
 };
-std::ostream& operator<<(ostream & os, const AirSimSync::NetConfig &config);
-
-// void initNsAirSim();
-// void readNetConfigFromAirSim();
-
-// void nsAirSimSimBegin();
-// void nsAirSimTakeTurn(Ptr<GcsApp> &gcsApp, std::vector< Ptr<UavApp> > &duavsApp);
+std::ostream& operator<<(ostream & os, const NetConfig &config);
 
 #endif

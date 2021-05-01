@@ -13,23 +13,24 @@
 #include "ns3/lte-helper.h"
 #include "ns3/epc-helper.h"
 #include "ns3/lte-module.h"
+// AirSim includes
+#include "common/common_utils/StrictMode.hpp"
+STRICT_MODE_OFF
+#ifndef RPCLIB_MSGPACK
+#define RPCLIB_MSGPACK clmdep_msgpack
+#endif // !RPCLIB_MSGPACK
+#include "rpc/rpc_error.h"
+STRICT_MODE_ON
+#include "vehicles/multirotor/api/MultirotorRpcLibClient.hpp"
+#include "common/common_utils/FileSystem.hpp"
 // custom includes
 #include "AirSimSync.h"
-// externs
-// extern int nzmqIOthread;
-// extern int numOfCong;
-// extern float congRate;
-// extern float congX, congY, congRho;
-// extern std::vector< std::vector<float> > initPostEnb;
-// extern int segmentSize;
-// extern std::vector<string> uavsName;
-// static float updateGranularity;
-// static EventId event;
+
 using namespace std;
 
 NS_LOG_COMPONENT_DEFINE("AIRSIM_SYNC");
 
-std::ostream& operator<<(ostream & os, const AirSimSync::NetConfig &config)
+std::ostream& operator<<(ostream & os, const NetConfig &config)
 {
     os << "nzmqIOthread " << config.nzmqIOthread << " seg size:" << config.segmentSize << " numOfCong:" << config.numOfCong << " congRate:" << config.congRate  << endl;
     os << "congX:" << config.congX << " congY:" << config.congY << " congRho:" << config.congRho  << endl;
@@ -58,7 +59,7 @@ AirSimSync::~AirSimSync()
     ;
 }
 
-void AirSimSync::readNetConfigFromAirSim(AirSimSync::NetConfig &config)
+void AirSimSync::readNetConfigFromAirSim(NetConfig &config)
 {
     zmq::message_t message;
     zmqRecvSocket.recv(message, zmq::recv_flags::none);
@@ -67,7 +68,9 @@ void AirSimSync::readNetConfigFromAirSim(AirSimSync::NetConfig &config)
     int numOfUav, numOfEnb;
     
     NS_LOG_INFO("Config: " << (const char*)message.data());
-    ss >> config.nzmqIOthread >> config.segmentSize >> config.updateGranularity >> config.numOfCong >> config.congRate >> config.congX >> config.congY >> config.congRho;
+    ss >> config.useWifi;
+    ss >> config.isMainLogEnabled >> config.isGcsLogEnabled >> config.isUavLogEnabled >> config.isCongLogEnabled >> config.isSyncLogEnabled;
+    ss >> config.segmentSize >> config.updateGranularity >> config.numOfCong >> config.congRate >> config.congX >> config.congY >> config.congRho;
     ss >> numOfUav;
     config.uavsName = std::vector<std::string>(numOfUav);
     for(int i = 0; i < numOfUav; i++){
@@ -104,17 +107,19 @@ void AirSimSync::takeTurn(Ptr<GcsApp> &gcsApp, std::vector< Ptr<UavApp> > &uavsA
     res = zmqRecvSocket.recv(message, zmq::recv_flags::none); // block until AirSim sends any (nofitied by AirSim)
     
     std::string s(static_cast<char*>(message.data()), message.size());
-    if((!res.has_value() || res.value() < 0) || (s == "End")){
-        zmq::message_t ntf("bye");
+    std::size_t n = s.find("bye");
+    if((!res.has_value() || res.value() < 0) || (n != std::string::npos)){
         if(event.IsRunning()){
-            NS_LOG_INFO("AirSimSync cancel");
             Simulator::Cancel(event);
         }
-        zmqSendSocket.send(ntf, zmq::send_flags::none);
+        double endTime = stod(s.substr(n+4)); 
         zmqRecvSocket.close();
         zmqSendSocket.close();
-        NS_LOG_INFO("AirSimSync stopped");
-        Simulator::Stop(Seconds(0));
+        gcsApp->SetStopTime(Seconds(max(0.0, endTime - now)));
+        for(auto &it:uavsApp){
+            it->SetStopTime(Seconds(max(0.0, endTime - now)));
+        }
+        Simulator::Stop(Seconds(max(0.0, endTime - now)));
         return;
     }
     
