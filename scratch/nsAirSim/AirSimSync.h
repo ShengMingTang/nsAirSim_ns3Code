@@ -1,5 +1,8 @@
 #ifndef INCLUDE_AIRSIMSYNC_H
 #define INCLUDE_AIRSIMSYNC_H
+// std includes
+#include <vector>
+#include <string>
 // ns3 includes
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
@@ -42,12 +45,42 @@ extern zmq::context_t context;
 #define UAV_APP_START_TIME (0.2)
 #define CONG_APP_START_TIME (UAV_APP_START_TIME)
 
+#define MAX_PACKET_SIZE (1024*1024*5)
+
+#define MAX_RECV_TIMEO (1000)
+
 using namespace std;
 
-void initNsAirSim();
-void readNetConfigFromAirSim();
+class AirSimSync
+{
+public:
+    struct NetConfig
+    {
+        int nzmqIOthread;
+        int numOfCong;
+        float congRate;
+        float congX, congY, congRho;
+        std::vector< std::vector<float> > initPostEnb;
+        int segmentSize;
+        std::vector<string> uavsName;
+        float updateGranularity;
+    };
+    AirSimSync(zmq::context_t &context);
+    ~AirSimSync();
+    void readNetConfigFromAirSim(NetConfig &config);
+    void startAirSim();
+    void takeTurn(Ptr<GcsApp> &gcsApp, std::vector< Ptr<UavApp> > &uavsApp);
+private:
+    zmq::socket_t zmqRecvSocket, zmqSendSocket;
+    float updateGranularity;
+    EventId event;
+};
+std::ostream& operator<<(ostream & os, const AirSimSync::NetConfig &config);
 
-void nsAirSimSimBegin();
-void nsAirSimTakeTurn(Ptr<GcsApp> &gcsApp, std::vector< Ptr<UavApp> > &duavsApp);
+// void initNsAirSim();
+// void readNetConfigFromAirSim();
+
+// void nsAirSimSimBegin();
+// void nsAirSimTakeTurn(Ptr<GcsApp> &gcsApp, std::vector< Ptr<UavApp> > &duavsApp);
 
 #endif

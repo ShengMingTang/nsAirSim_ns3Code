@@ -1,4 +1,5 @@
 // std includes
+#include <cstdlib>
 // ns3 includes
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
@@ -8,8 +9,10 @@
 #include "ns3/stats-module.h"
 // custom includes
 #include "congApp.h"
+
+// #include "AirSimSync.h"
 // externs
-extern int segmentSize;
+// extern AirSimSync::NetConfig config;
 
 using namespace std;
 using namespace ns3;
@@ -64,7 +67,7 @@ void CongApp::StartApplication(void)
     );
 
     scheduleTx();
-    
+
     NS_LOG_INFO("[Cong " << m_name << " starts]");
 }
 void CongApp::StopApplication(void)
@@ -84,9 +87,14 @@ void CongApp::StopApplication(void)
 void CongApp::scheduleTx(void)
 {
     float now = Simulator::Now().GetSeconds();
-    Ptr<Packet> packet = Create<Packet>(segmentSize);
-    Time tNext(Seconds(1/m_congRate));
-    Simulator::Schedule(tNext, &CongApp::Tx, this, m_socket, packet);
+    // r [0, 1]
+    float r = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
+    r = rand() % 2 ? r : -r;
+
+    Ptr<Packet> packet = Create<Packet>(1400);
+
+    Time tNext(Seconds(max((float)0.1, 1/m_congRate + r)));
+    m_event = Simulator::Schedule(tNext, &CongApp::Tx, this, m_socket, packet);
     NS_LOG_INFO("time: " << now << ", [" << m_name << " send]");
 }
 /* <from-address> <payload> then forward to application code */

@@ -42,7 +42,7 @@ public:
     * \return The TypeId.
     */
     static TypeId GetTypeId (void);
-    void Setup (Ptr<Socket> socket, Address address, 
+    void Setup (zmq::context_t &context, Ptr<Socket> socket, Address address, 
         std::map<std::string, Ptr<ConstantPositionMobilityModel> > uavsMobility,
         int zmqRecvPort, int zmqSendPort
     );
@@ -62,10 +62,10 @@ private:
     void peerErrorCallback(Ptr<Socket> socket);
 
     // ns stuffs
-    bool m_running;
+    bool m_running = false;
     Ptr<Socket>     m_socket;
     Address m_address;
-    EventId m_event;
+    std::queue<EventId> m_events;
     
     std::set< Ptr<Socket> > m_socketSet; // update on accept()
     std::map<Address, std::string> m_uavsAddress2Name;

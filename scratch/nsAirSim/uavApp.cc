@@ -25,15 +25,12 @@ STRICT_MODE_ON
 #include "uavApp.h"
 #include "AirSimSync.h"
 
-// extern
-extern zmq::context_t context;
-
 using namespace std;
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("UavApp");
 
-UavApp::UavApp(): m_event()
+UavApp::UavApp()
 {
     // Todo
 }
@@ -54,7 +51,7 @@ TypeId UavApp::GetTypeId(void)
 }
 
 /* Init ns stuff, rPC client connection and zmq socket init, connect */
-void UavApp::Setup(Ptr<Socket> socket, Address myAddress, Address peerAddress,
+void UavApp::Setup(zmq::context_t &context, Ptr<Socket> socket, Address myAddress, Address peerAddress,
     int zmqRecvPort, int zmqSendPort, std::string name
 )
 {
@@ -72,62 +69,91 @@ void UavApp::Setup(Ptr<Socket> socket, Address myAddress, Address peerAddress,
 /* Bind ns sockets and logging*/
 void UavApp::StartApplication(void)
 {
-    m_running = true;
 
     // ns socket routines
     m_socket->Bind();
+    m_socket->SetRecvCallback(MakeCallback(&UavApp::recvCallback, this));
     if(m_socket->Connect(m_peerAddress) != 0){
         NS_FATAL_ERROR("UAV connect error");
     };
     
     /* @@ We may leave the job to application */
     // send my name
-    std::string s = "name " + m_name;
-    Ptr<Packet> packet = Create<Packet>((const uint8_t*)(s.c_str()), s.size());
+    std::string s = "name " + m_name + " ";
+    Ptr<Packet> packet = Create<Packet>((const uint8_t*)(s.c_str()), s.size()+1);
     if(m_socket->Send(packet) == -1){
-        NS_FATAL_ERROR(m_name << "sends my name Error");
+        NS_FATAL_ERROR(m_name << " sends my name Error");
     }
-    
-    m_socket->SetRecvCallback(
-        MakeCallback(&UavApp::recvCallback, this)
-    );
 
-    NS_LOG_INFO("[ " << m_name << " starts]");
+    m_running = true;
+    NS_LOG_INFO("[" << m_name << " starts]");
 }
 void UavApp::StopApplication(void)
 {
     m_running = false;
 
-    if(m_event.IsRunning()){
-        Simulator::Cancel(m_event);
+    while(!m_events.empty()){
+        EventId event = m_events.front();
+        if(event.IsRunning()){
+            Simulator::Cancel(event);
+        }
+        m_events.pop();
     }
     if(m_socket){
         m_socket->Close();
     }
 
-    NS_LOG_INFO("[ " << m_name << " stopped]");
+    m_zmqSocketSend.close();
+    m_zmqSocketRecv.close();
+
+    NS_LOG_INFO("[" << m_name << " stopped]");
 }
+
+
+void UavApp::Tx(Ptr<Socket> socket, std::string payload)
+{
+    int ret;
+    Ptr<Packet> packet = Create<Packet>((const uint8_t*)(payload.c_str()), payload.length()+1);
+    if((ret = socket->Send(packet)) == -1){
+        NS_LOG_WARN(m_name << " sends packet Error " << ret);
+    }
+}
+
 /* <sim_time> <payload> */
 void UavApp::scheduleTx(void)
 {
     zmq::message_t message;
-    float now = Simulator::Now().GetSeconds();
+    double now = Simulator::Now().GetSeconds();
     zmq::recv_result_t res;
-    while((res = m_zmqSocketRecv.recv(message, zmq::recv_flags::dontwait)) && res.has_value() && res.value() != -1){ // EAGAIN
+
+    if(!m_running){
+        return;
+    }
+
+    while(!m_events.empty() && !m_events.front().IsRunning()){
+        m_events.pop();
+    }
+
+    res = m_zmqSocketRecv.recv(message, zmq::recv_flags::dontwait);
+    while(res.has_value() && res.value() != -1){ // EAGAIN
         std::string smessage(static_cast<char*>(message.data()), message.size());
         std::stringstream ss(smessage);
-        float simTime;
+        double simTime;
         std::string payload;
 
-        ss >> simTime >> payload;
+        ss >> simTime;
+        payload = ss.str();
 
         Ptr<Packet> packet = Create<Packet>((const uint8_t*)(payload.c_str()), payload.length()+1);
-        // m_socket->Send(packet);
-        Time tNext(Seconds(simTime - now));
-        Simulator::Schedule(tNext, &UavApp::Tx, this, m_socket, packet);
-        NS_LOG_INFO("time: " << simTime << ", [" << m_name << " send]" << payload);
+
+        Time tNext(Seconds(max(0.0, simTime - now)));
+        EventId event = Simulator::Schedule(tNext, &UavApp::Tx, this, m_socket, payload);
+        m_events.push(event);
+        
+        NS_LOG_INFO("time: " << simTime << ", [" << m_name << " send " << payload.length() << " bytes]");
 
         message.rebuild();
+        res = m_zmqSocketRecv.recv(message, zmq::recv_flags::dontwait);
     }
 }
 /* <from-address> <payload> then forward to application code */
@@ -135,18 +161,12 @@ void UavApp::recvCallback(Ptr<Socket> socket)
 {
     Ptr<Packet> packet;
     Address from;
-    char buff[300] = {0};
     float now = Simulator::Now().GetSeconds();
-
     packet = socket->RecvFrom(from);
-    // packet = socket->Recv();
-    
-    std::stringstream ss;
-    std::string s;
-    packet->CopyData((uint8_t *)buff, sizeof(buff)-1);
-    ss << from << " " << buff;
-    s = ss.str();
-    zmq::message_t message(s.begin(), s.end());
-    NS_LOG_INFO("time: " << now << ", [" << m_name << " recv] content: " << buff);
+
+    zmq::message_t message(packet->GetSize());
+    packet->CopyData((uint8_t *)message.data(), packet->GetSize());
     m_zmqSocketSend.send(message, zmq::send_flags::none);
+    // NS_LOG_INFO("time: " << now << ", [" << m_name << " recv] " << packet->GetSize() << " bytes");
+    NS_LOG_INFO("time: " << now << ", [" << m_name << " recv]: " << (const char*)message.data());
 }

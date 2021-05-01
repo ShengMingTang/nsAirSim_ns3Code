@@ -28,7 +28,7 @@ public:
     * \return The TypeId.
     */
     static TypeId GetTypeId(void);
-    void Setup(Ptr<Socket> socket, Address myAddress, Address peerAddress,
+    void Setup(zmq::context_t &context, Ptr<Socket> socket, Address myAddress, Address peerAddress,
         int zmqRecvPort, int zmqSendPort, std::string name
     );
 
@@ -37,16 +37,17 @@ private:
     virtual void StartApplication (void);
     virtual void StopApplication (void);
 
-    void Tx(Ptr<Socket> socket, Ptr<Packet> packet) {socket->Send(packet);}
+    // void Tx(Ptr<Socket> socket, Ptr<Packet> packet);
+    void Tx(Ptr<Socket> socket, std::string payload);
 
     void recvCallback(Ptr<Socket> socket);
 
-    bool m_running;
+    bool m_running = false;
     // ns stuff
     Ptr<Socket>     m_socket;
     Address         m_address;
     Address         m_peerAddress;
-    EventId         m_event;
+    std::queue<EventId> m_events;
 
     // custom application member
     string m_name;

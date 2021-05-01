@@ -16,36 +16,49 @@
 // custom includes
 #include "AirSimSync.h"
 // externs
-extern int nzmqIOthread;
-extern int numOfCong;
-extern float congRate;
-extern float congX, congY, congRho;
-extern std::vector< std::vector<float> > initPostEnb;
-extern int segmentSize;
-extern std::vector<string> uavsName;
-extern zmq::context_t context;
-
+// extern int nzmqIOthread;
+// extern int numOfCong;
+// extern float congRate;
+// extern float congX, congY, congRho;
+// extern std::vector< std::vector<float> > initPostEnb;
+// extern int segmentSize;
+// extern std::vector<string> uavsName;
+// static float updateGranularity;
+// static EventId event;
 using namespace std;
-
-
-static zmq::socket_t zmqRecvSocket, zmqSendSocket;
-static float updateGranularity;
 
 NS_LOG_COMPONENT_DEFINE("AIRSIM_SYNC");
 
-void initNsAirSim()
+std::ostream& operator<<(ostream & os, const AirSimSync::NetConfig &config)
+{
+    os << "nzmqIOthread " << config.nzmqIOthread << " seg size:" << config.segmentSize << " numOfCong:" << config.numOfCong << " congRate:" << config.congRate  << endl;
+    os << "congX:" << config.congX << " congY:" << config.congY << " congRho:" << config.congRho  << endl;
+    os << "UAV names(" << config.uavsName.size() << "):" << endl;
+    for(auto it:config.uavsName){
+        os << it << ",";
+    }
+    os << endl;
+
+    os << "Enb pos:"  << endl;
+    for(int i = 0; i < config.initPostEnb.size(); i++){
+        os << i << "(" << config.initPostEnb[i][0] << ", " << config.initPostEnb[i][1] << ", " << config.initPostEnb[i][2] << ")"  << endl;
+    }
+    return os;
+}
+
+AirSimSync::AirSimSync(zmq::context_t &context): event()
 {
     zmqRecvSocket = zmq::socket_t(context, ZMQ_PULL);
     zmqRecvSocket.connect("tcp://localhost:" + to_string(AIRSIM2NS_CTRL_PORT));
     zmqSendSocket = zmq::socket_t(context, ZMQ_PUSH);
     zmqSendSocket.bind("tcp://*:" + to_string(NS2AIRSIM_CTRL_PORT));
 }
+AirSimSync::~AirSimSync()
+{
+    ;
+}
 
-/*
-ns airsim
-# <- : nzmqIOthread segmentSize updateGranularity numOfCong congRate [congX congY congRho] numOfUav [name1 ]+ numOfEnb [px py pz ]+
-*/
-void readNetConfigFromAirSim()
+void AirSimSync::readNetConfigFromAirSim(AirSimSync::NetConfig &config)
 {
     zmq::message_t message;
     zmqRecvSocket.recv(message, zmq::recv_flags::none);
@@ -53,55 +66,69 @@ void readNetConfigFromAirSim()
     std::istringstream ss(s);
     int numOfUav, numOfEnb;
     
-    ss >> nzmqIOthread >> segmentSize >> updateGranularity >> numOfCong >> congRate >> congX >> congY >> congRho;
+    NS_LOG_INFO("Config: " << (const char*)message.data());
+    ss >> config.nzmqIOthread >> config.segmentSize >> config.updateGranularity >> config.numOfCong >> config.congRate >> config.congX >> config.congY >> config.congRho;
     ss >> numOfUav;
-    uavsName = std::vector<std::string>(numOfUav);
+    config.uavsName = std::vector<std::string>(numOfUav);
     for(int i = 0; i < numOfUav; i++){
-        ss >> uavsName[i];
+        ss >> config.uavsName[i];
     }
     ss >> numOfEnb;
-    initPostEnb = std::vector< std::vector<float> >(numOfEnb, std::vector<float>(3));
+    config.initPostEnb = std::vector< std::vector<float> >(numOfEnb, std::vector<float>(3));
     for(int i = 0; i < numOfEnb; i++){
-        ss >> initPostEnb[i][0] >> initPostEnb[i][1] >> initPostEnb[i][2];
+        ss >> config.initPostEnb[i][0] >> config.initPostEnb[i][1] >> config.initPostEnb[i][2];
     }
-}
 
-void nsAirSimSimBegin()
+    zmqRecvSocket.setsockopt(ZMQ_RCVTIMEO, MAX_RECV_TIMEO);
+    updateGranularity = config.updateGranularity;
+}
+void AirSimSync::startAirSim()
 {
     zmq::message_t ntf(1);
     // notify AirSim
     zmqSendSocket.send(ntf, zmq::send_flags::none);
 }
-
-void nsAirSimTakeTurn(Ptr<GcsApp> &gcsApp, std::vector< Ptr<UavApp> > &uavsApp)
+void AirSimSync::takeTurn(Ptr<GcsApp> &gcsApp, std::vector< Ptr<UavApp> > &uavsApp)
 {
     float now = Simulator::Now().GetSeconds();
     zmq::message_t message;
-    NS_LOG_INFO("Time: " << now);
-
+    zmq::recv_result_t res;
     zmq::message_t ntf(1);
+    
+    // NS_LOG_INFO("Time: " << now);
+
     // notify AirSim
     zmqSendSocket.send(ntf, zmq::send_flags::dontwait);
-
+    
     // AirSim's turn at time t
-    zmqRecvSocket.recv(message, zmq::recv_flags::none); // block until AirSim sends any (nofitied by AirSim)
-
+    res = zmqRecvSocket.recv(message, zmq::recv_flags::none); // block until AirSim sends any (nofitied by AirSim)
+    
     std::string s(static_cast<char*>(message.data()), message.size());
-    if(s == "End"){
-        zmq::message_t message("End");
-        zmqSendSocket.send(message, zmq::send_flags::none);
-        Simulator::Stop(Seconds (0.0));
+    if((!res.has_value() || res.value() < 0) || (s == "End")){
+        zmq::message_t ntf("bye");
+        if(event.IsRunning()){
+            NS_LOG_INFO("AirSimSync cancel");
+            Simulator::Cancel(event);
+        }
+        zmqSendSocket.send(ntf, zmq::send_flags::none);
+        zmqRecvSocket.close();
+        zmqSendSocket.close();
+        NS_LOG_INFO("AirSimSync stopped");
+        Simulator::Stop(Seconds(0));
+        return;
     }
     
     // ns' turn at time t, AirSim at time t + 1
     // packet send
-    // gcsApp->mobilityUpdateDirect();
-    gcsApp->scheduleTx();
+    gcsApp->mobilityUpdateDirect();
+    if(gcsApp){
+        gcsApp->scheduleTx();
+    }
     for(int i = 0; i < uavsApp.size(); i++){
         uavsApp[i]->scheduleTx();
     }
 
     // will fire at time t + 1
     Time tNext(Seconds(updateGranularity));
-    Simulator::Schedule(tNext, &nsAirSimTakeTurn, gcsApp, uavsApp);
+    event = Simulator::Schedule(tNext, &AirSimSync::takeTurn, this, gcsApp, uavsApp);
 }
