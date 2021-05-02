@@ -131,8 +131,7 @@ void GcsApp::scheduleTx(void)
     double now = Simulator::Now().GetSeconds();
     zmq::recv_result_t res;
     
-    zmq::message_t rep(1);
-    int repRes = -1;
+    zmq::message_t rep(4);
 
     if(!m_running){
         return;
@@ -147,6 +146,7 @@ void GcsApp::scheduleTx(void)
         std::size_t head;
         std::string name;
         const uint8_t *payload = NULL;
+        int repRes = -1;
 
         head = message.to_string().find(' ');
         name = message.to_string().substr(0, head);
@@ -156,12 +156,17 @@ void GcsApp::scheduleTx(void)
             Ptr<Packet> packet = Create<Packet>((const uint8_t*)payload, message.size()-(payload - (const uint8_t*)message.data()));
             repRes = m_connectedSockets[name]->Send(packet);
 
-            NS_LOG_INFO("time: " << now << ", [GCS send] to " << name << " " << packet->GetSize() << " bytes");
+            if(repRes < 0){
+                NS_LOG_WARN("time: " << now << ", [GCS send] to " << name << " " << packet->GetSize() << " bytes ERROR" << repRes);
+            }
+            else{
+                NS_LOG_INFO("time: " << now << ", [GCS send] to " << name << " " << packet->GetSize() << " bytes");
+            }
         }
         else{
             NS_FATAL_ERROR("[GCS drop] a packet supposed to be sent to " << name);
         }
-        *(unsigned uint8_t*)rep.data() = repRes;
+        *(int*)rep.data() = repRes;
         m_zmqSocketRecv.send(rep, zmq::send_flags::dontwait);
 
         message.rebuild();
@@ -211,7 +216,7 @@ void GcsApp::recvCallback(Ptr<Socket> socket)
         p++;
 
         packet->CopyData(p, packet->GetSize());
-        m_zmqSocketSend.send(message, zmq::send_flags::none);
+        m_zmqSocketSend.send(message, zmq::send_flags::dontwait);
         NS_LOG_INFO("time: " << now << ", [GCS recv] from-" << m_uavsAddress2Name[from] << ", " << packet->GetSize() << " bytes");
     }
 

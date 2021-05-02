@@ -98,28 +98,32 @@ void AirSimSync::takeTurn(Ptr<GcsApp> &gcsApp, std::vector< Ptr<UavApp> > &uavsA
     zmq::recv_result_t res;
     zmq::message_t ntf(1);
     
-    // NS_LOG_INFO("Time: " << now);
-
     // notify AirSim
     zmqSendSocket.send(ntf, zmq::send_flags::dontwait);
     
     // AirSim's turn at time t
-    res = zmqRecvSocket.recv(message, zmq::recv_flags::none); // block until AirSim sends any (nofitied by AirSim)
+    // block until AirSim sends any (nofitied by AirSim)
+    if(waitOnAirSIm){
+        res = zmqRecvSocket.recv(message, zmq::recv_flags::none);
+    }
     
     std::string s(static_cast<char*>(message.data()), message.size());
     std::size_t n = s.find("bye");
+    // This implied that a hard limit of 1 second for AirSim to run a period
+    // Run below if AirSim is believed to be done (it disconnects or it says bye)
     if((!res.has_value() || res.value() < 0) || (n != std::string::npos)){
         if(event.IsRunning()){
             Simulator::Cancel(event);
         }
-        double endTime = stod(s.substr(n+4)); 
+        double endTime = stod(s.substr(n+4)) - now + CLEAN_UP_TIME;
+        zmqSendSocket.send(ntf, zmq::send_flags::dontwait);
         zmqRecvSocket.close();
         zmqSendSocket.close();
-        gcsApp->SetStopTime(Seconds(max(0.0, endTime - now)));
+        gcsApp->SetStopTime(Seconds(endTime));
         for(auto &it:uavsApp){
-            it->SetStopTime(Seconds(max(0.0, endTime - now)));
+            it->SetStopTime(Seconds(endTime));
         }
-        Simulator::Stop(Seconds(max(0.0, endTime - now)));
+        Simulator::Stop(Seconds(endTime));
         return;
     }
     

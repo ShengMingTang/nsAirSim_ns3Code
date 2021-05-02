@@ -9,6 +9,8 @@
 #include "ns3/applications-module.h"
 #include "ns3/stats-module.h"
 
+#define CONG_PACKET_SIZE (1024*5)
+
 using namespace std;
 using namespace ns3;
 
@@ -32,7 +34,7 @@ private:
     virtual void StartApplication (void);
     virtual void StopApplication (void);
 
-    void Tx(Ptr<Socket> socket, Ptr<Packet> packet) {socket->Send(packet);}
+    void Tx(Ptr<Socket> socket, Ptr<Packet> packet);
 
     void recvCallback(Ptr<Socket> socket);
 

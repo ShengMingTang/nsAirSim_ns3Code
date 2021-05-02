@@ -62,8 +62,17 @@ void CongApp::StartApplication(void)
         MakeCallback(&CongApp::recvCallback, this)
     );
 
-    scheduleTx();
+    // send my name
+    std::string s = "name " + m_name + " ";
+    Ptr<Packet> packet = Create<Packet>((const uint8_t*)(s.c_str()), s.size()+1);
+    if(m_socket->Send(packet) == -1){
+        NS_FATAL_ERROR(m_name << " sends my name Error");
+    }
 
+    m_running = true;
+    NS_LOG_INFO("[" << m_name << " starts]");
+
+    scheduleTx();
     NS_LOG_INFO("[Cong " << m_name << " starts]");
 }
 void CongApp::StopApplication(void)
@@ -79,19 +88,28 @@ void CongApp::StopApplication(void)
 
     NS_LOG_INFO("[Cong " << m_name << " stopped]");
 }
-/* <sim_time> <payload> */
-void CongApp::scheduleTx(void)
+void CongApp::Tx(Ptr<Socket> socket, Ptr<Packet> packet)
 {
     float now = Simulator::Now().GetSeconds();
+    int res = socket->Send(packet);
+
+    if(res < 0){
+        NS_LOG_WARN("time: " << now << ", [" << m_name << " send] ERROR " << res);
+    }
+    else{
+        NS_LOG_INFO("time: " << now << ", [" << m_name << " send]");
+    }
+}
+void CongApp::scheduleTx(void)
+{
     // r [0, 1]
     float r = static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
     r = rand() % 2 ? r : -r;
 
-    Ptr<Packet> packet = Create<Packet>(m_congRate*1024);
+    Ptr<Packet> packet = Create<Packet>(CONG_PACKET_SIZE);
 
     Time tNext(Seconds(max((float)1e-3, 1/m_congRate + r)));
     m_event = Simulator::Schedule(tNext, &CongApp::Tx, this, m_socket, packet);
-    NS_LOG_INFO("time: " << now << ", [" << m_name << " send]");
 }
 /* <from-address> <payload> then forward to application code */
 void CongApp::recvCallback(Ptr<Socket> socket)
@@ -101,7 +119,6 @@ void CongApp::recvCallback(Ptr<Socket> socket)
     Address from;
 
     packet = socket->RecvFrom(from);
-    // packet = socket->Recv();
 
     NS_LOG_INFO("time: " << now << ", [" << m_name << " recv]");
 }

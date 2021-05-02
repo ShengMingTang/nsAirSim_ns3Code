@@ -126,8 +126,7 @@ void UavApp::scheduleTx(void)
     double now = Simulator::Now().GetSeconds();
     zmq::recv_result_t res;
 
-    zmq::message_t rep(1);
-    int repRes = -1;
+    zmq::message_t rep(4);
 
     if(!m_running){
         return;
@@ -139,15 +138,21 @@ void UavApp::scheduleTx(void)
 
     res = m_zmqSocketRecv.recv(message, zmq::recv_flags::dontwait);
     while(res.has_value() && res.value() != -1){ // EAGAIN
+        int repRes = -1;
         const uint8_t *payload = NULL;
 
         payload = (const uint8_t*)message.data();
         Ptr<Packet> packet = Create<Packet>((const uint8_t*)payload, message.size());
         repRes = m_socket->Send(packet);
 
-        *(unsigned uint8_t*)rep.data() = repRes;
+        *(int*)rep.data() = repRes;
         m_zmqSocketRecv.send(rep, zmq::send_flags::dontwait);
-        NS_LOG_INFO("time: " << now << " " << m_name << " sends " << repRes << " bytes");
+        if(repRes < 0){
+            NS_LOG_INFO("time: " << now << " " << m_name << " sends " << packet->GetSize() << " bytes ERROR " << repRes);
+        }
+        else{
+            NS_LOG_INFO("time: " << now << " " << m_name << " sends " << packet->GetSize() << " bytes");
+        }
 
         message.rebuild();
         res = m_zmqSocketRecv.recv(message, zmq::recv_flags::dontwait);
@@ -163,6 +168,6 @@ void UavApp::recvCallback(Ptr<Socket> socket)
 
     zmq::message_t message(packet->GetSize());
     packet->CopyData((uint8_t *)message.data(), packet->GetSize());
-    m_zmqSocketSend.send(message, zmq::send_flags::none);
+    m_zmqSocketSend.send(message, zmq::send_flags::dontwait);
     NS_LOG_INFO("time: " << now << ", [" << m_name << " recv]: " << (const char*)message.data());
 }

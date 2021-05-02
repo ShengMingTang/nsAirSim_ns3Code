@@ -33,12 +33,12 @@ using namespace ns3;
 NS_LOG_COMPONENT_DEFINE ("NS_AIRSIM");
 
 static int nRbs = 6; // see https://i.imgur.com/q55uR8T.png
-static uint TcpSndBufSize = 429496729;
-static uint TcpRcvBufSize = 429496729;
+static uint TcpSndBufSize = 1024*50; // was 429496729
+static uint TcpRcvBufSize = 1024*50; // was 429496729
 static uint CqiTimerThreshold = 10;
 static double LteTxPower = 0;
 static bool useWifi = false;
-static std::string p2pDataRate("1Gb/s");
+static std::string p2pDataRate("10Gb/s");
 static uint p2pMtu = 1500;
 static double p2pDelay = 1e-3; 
 
@@ -284,10 +284,11 @@ int main(int argc, char *argv[])
     Ptr<Socket> congTcpSocket = Socket::CreateSocket(congNodes.Get(i), TcpSocketFactory::GetTypeId());
     Address congMyAddress(InetSocketAddress(Ipv4Address::GetAny(), congPort));
     Ptr<CongApp> app = CreateObject<CongApp>();
+    std::string name("anoy");
     
     congNodes.Get(i)->AddApplication(app);
     app->Setup(congTcpSocket, congMyAddress, gcsSinkAddress,
-      config.congRate, "cong" + to_string(i)
+      config.congRate, name
     );
     app->SetStartTime(Seconds(CONG_APP_START_TIME));
     app->SetStopTime(Simulator::GetMaximumSimulationTime());
@@ -301,7 +302,8 @@ int main(int argc, char *argv[])
   // enableMobilityMeasure("nsAirSim_mobility.csv", uavNodes, config.uavsName);
 
   FlowMonitorHelper flowmon;
-  Ptr<FlowMonitor> monitor = flowmon.Install(gcsNode);
+  Ptr<FlowMonitor> uavMonitor = flowmon.Install(uavNodes.Get(0));
+  Ptr<FlowMonitor> gcsMonitor = flowmon.Install(gcsNode);
 
   // ==========================================================================
   // Run
@@ -311,12 +313,24 @@ int main(int argc, char *argv[])
   Simulator::Run();
   
   // ==========================================================================
-  monitor->CheckForLostPackets ();
-  Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
-  FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
-  for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i){
-    Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
-    std::cout << "source=" << t.sourceAddress << ", dest=" << t.destinationAddress << ", throughput= "<< i->second.txBytes * 8.0 / (i->second.timeLastTxPacket.GetSeconds() - i->second.timeFirstTxPacket.GetSeconds()+0.001) / 1000 / 1000  << " Mbps"  << endl;
+  NS_LOG_INFO("UAV monitor:");
+  uavMonitor->CheckForLostPackets ();
+  Ptr<Ipv4FlowClassifier> uavClassifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
+  FlowMonitor::FlowStatsContainer uavStats = uavMonitor->GetFlowStats ();
+  for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = uavStats.begin (); i != uavStats.end (); ++i){
+    Ipv4FlowClassifier::FiveTuple t = uavClassifier->FindFlow (i->first);
+    std::cout << "source=" << t.sourceAddress << ", dest=" << t.destinationAddress << " TxBytes= " << i->second.txBytes << ", throughput= "<< i->second.txBytes * 8.0 / (i->second.timeLastTxPacket.GetSeconds() - i->second.timeFirstTxPacket.GetSeconds()+0.001) / 1000 / 1000  << " Mbps"  << endl;
+    std::cout << "packet lost=" << i->second.lostPackets << endl;
+  }
+
+  NS_LOG_INFO("GCS monitor:");
+  gcsMonitor->CheckForLostPackets ();
+  Ptr<Ipv4FlowClassifier> gcsClassifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
+  FlowMonitor::FlowStatsContainer gcsStats = gcsMonitor->GetFlowStats ();
+  for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = gcsStats.begin (); i != gcsStats.end (); ++i){
+    Ipv4FlowClassifier::FiveTuple t = gcsClassifier->FindFlow (i->first);
+    std::cout << "source=" << t.sourceAddress << ", dest=" << t.destinationAddress << " TxBytes= " << i->second.txBytes << ", throughput= "<< i->second.txBytes * 8.0 / (i->second.timeLastTxPacket.GetSeconds() - i->second.timeFirstTxPacket.GetSeconds()+0.001) / 1000 / 1000  << " Mbps"  << endl;
+    std::cout << "packet lost=" << i->second.lostPackets << endl;
   }
 
   // ==========================================================================

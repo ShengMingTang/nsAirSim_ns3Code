@@ -35,9 +35,8 @@ extern zmq::context_t context;
 #define UAV_APP_START_TIME (0.2)
 #define CONG_APP_START_TIME (UAV_APP_START_TIME)
 
-#define MAX_PACKET_SIZE (1024*1024*5)
-
 #define MAX_RECV_TIMEO (1000)
+#define CLEAN_UP_TIME (1.0)
 
 using namespace std;
 
@@ -73,6 +72,7 @@ private:
     zmq::socket_t zmqRecvSocket, zmqSendSocket;
     float updateGranularity;
     EventId event;
+    bool waitOnAirSIm = true;
 };
 std::ostream& operator<<(ostream & os, const NetConfig &config);
 
