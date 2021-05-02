@@ -42,22 +42,30 @@ using namespace std;
 
 struct NetConfig
 {
-    int nzmqIOthread;
+    float updateGranularity;
+    int segmentSize;
     int numOfCong;
     float congRate;
     float congX, congY, congRho;
-    std::vector< std::vector<float> > initPostEnb;
-    int segmentSize;
     std::vector<string> uavsName;
-    float updateGranularity;
+    std::vector< std::vector<float> > initPostEnb;
     
+    int nRbs = 6; // see https://i.imgur.com/q55uR8T.png
+    uint TcpSndBufSize = 1024*50; // was 429496729
+    uint TcpRcvBufSize = 1024*50; // was 429496729
+    uint CqiTimerThreshold = 10;
+    double LteTxPower = 0;
+    std::string p2pDataRate = "10Gb/s";
+    uint p2pMtu = 1500;
+    double p2pDelay = 1e-3; 
     int useWifi;
-    // NS logging
+    
     int isMainLogEnabled;
     int isGcsLogEnabled;
     int isUavLogEnabled;
     int isCongLogEnabled;
     int isSyncLogEnabled;
+
 };
 
 class AirSimSync
@@ -74,6 +82,7 @@ private:
     EventId event;
     bool waitOnAirSIm = true;
 };
+std::istream& operator>>(istream & is, NetConfig &config);
 std::ostream& operator<<(ostream & os, const NetConfig &config);
 
 #endif

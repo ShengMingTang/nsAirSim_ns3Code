@@ -29,21 +29,56 @@ STRICT_MODE_ON
 using namespace std;
 
 NS_LOG_COMPONENT_DEFINE("AIRSIM_SYNC");
+std::istream& operator>>(istream & is, NetConfig &config)
+{
+    int numOfUav, numOfEnb;
+    is >> config.updateGranularity;
+    is >> config.segmentSize >> config.numOfCong >> config.congRate >> config.congX >> config.congY >> config.congRho;
+    
+    // uav names parsing
+    is >> numOfUav;
+    config.uavsName = std::vector<std::string>(numOfUav);
+    for(int i = 0; i < numOfUav; i++){
+        is >> config.uavsName[i];
+    }
+    // enb position parsing
+    is >> numOfEnb;
+    config.initPostEnb = std::vector< std::vector<float> >(numOfEnb, std::vector<float>(3));
+    for(int i = 0; i < numOfEnb; i++){
+        is >> config.initPostEnb[i][0] >> config.initPostEnb[i][1] >> config.initPostEnb[i][2];
+    }
 
+    // net config group
+    is >> config.nRbs >> config.TcpSndBufSize >> config.TcpRcvBufSize >> config.CqiTimerThreshold;
+    is >> config.LteTxPower >> config.p2pDataRate >> config.p2pMtu >> config.p2pDelay;
+    is >> config.useWifi;
+    
+    is >> config.isMainLogEnabled >> config.isGcsLogEnabled >> config.isUavLogEnabled >> config.isCongLogEnabled >> config.isSyncLogEnabled;
+
+    return is;
+}
 std::ostream& operator<<(ostream & os, const NetConfig &config)
 {
-    os << "nzmqIOthread " << config.nzmqIOthread << " seg size:" << config.segmentSize << " numOfCong:" << config.numOfCong << " congRate:" << config.congRate  << endl;
-    os << "congX:" << config.congX << " congY:" << config.congY << " congRho:" << config.congRho  << endl;
+    os << "update granularity: " << config.updateGranularity << endl;
+    os << "seg size:" << config.segmentSize;
+    os << "numOfCong:" << config.numOfCong << " congRate:" << config.congRate << "congX:" << config.congX << " congY:" << config.congY << " congRho:" << config.congRho  << endl;
+    
+    // UAV names
     os << "UAV names(" << config.uavsName.size() << "):" << endl;
     for(auto it:config.uavsName){
         os << it << ",";
     }
     os << endl;
-
+    // Enbs
     os << "Enb pos:"  << endl;
     for(int i = 0; i < config.initPostEnb.size(); i++){
         os << i << "(" << config.initPostEnb[i][0] << ", " << config.initPostEnb[i][1] << ", " << config.initPostEnb[i][2] << ")"  << endl;
     }
+
+    os << "nRbs: " << config.nRbs << ", TcpSndBufSize:" << config.TcpSndBufSize << ", TcpRcvBufSize:" << config.TcpRcvBufSize << endl;
+    os << "CqiTimerThreshold: " << config.CqiTimerThreshold << ", LteTxPower: " << config.LteTxPower << ", p2pDataRate:" << config.p2pDataRate << ", p2pMtu: " << config.p2pMtu << ", p2pDelay: " << config.p2pDelay << endl;
+    
+    os << "useWifi: " << config.useWifi;
     return os;
 }
 
@@ -65,25 +100,12 @@ void AirSimSync::readNetConfigFromAirSim(NetConfig &config)
     zmqRecvSocket.recv(message, zmq::recv_flags::none);
     std::string s(static_cast<char*>(message.data()), message.size());
     std::istringstream ss(s);
-    int numOfUav, numOfEnb;
     
     NS_LOG_INFO("Config: " << (const char*)message.data());
-    ss >> config.useWifi;
-    ss >> config.isMainLogEnabled >> config.isGcsLogEnabled >> config.isUavLogEnabled >> config.isCongLogEnabled >> config.isSyncLogEnabled;
-    ss >> config.segmentSize >> config.updateGranularity >> config.numOfCong >> config.congRate >> config.congX >> config.congY >> config.congRho;
-    ss >> numOfUav;
-    config.uavsName = std::vector<std::string>(numOfUav);
-    for(int i = 0; i < numOfUav; i++){
-        ss >> config.uavsName[i];
-    }
-    ss >> numOfEnb;
-    config.initPostEnb = std::vector< std::vector<float> >(numOfEnb, std::vector<float>(3));
-    for(int i = 0; i < numOfEnb; i++){
-        ss >> config.initPostEnb[i][0] >> config.initPostEnb[i][1] >> config.initPostEnb[i][2];
-    }
 
-    zmqRecvSocket.setsockopt(ZMQ_RCVTIMEO, MAX_RECV_TIMEO);
+    ss >> config;
     updateGranularity = config.updateGranularity;
+    zmqRecvSocket.setsockopt(ZMQ_RCVTIMEO, MAX_RECV_TIMEO);
 }
 void AirSimSync::startAirSim()
 {
