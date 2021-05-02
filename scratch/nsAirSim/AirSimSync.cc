@@ -125,7 +125,7 @@ void AirSimSync::takeTurn(Ptr<GcsApp> &gcsApp, std::vector< Ptr<UavApp> > &uavsA
     
     // AirSim's turn at time t
     // block until AirSim sends any (nofitied by AirSim)
-    if(waitOnAirSIm){
+    if(waitOnAirSim){
         res = zmqRecvSocket.recv(message, zmq::recv_flags::none);
     }
     
@@ -146,6 +146,7 @@ void AirSimSync::takeTurn(Ptr<GcsApp> &gcsApp, std::vector< Ptr<UavApp> > &uavsA
             it->SetStopTime(Seconds(endTime));
         }
         Simulator::Stop(Seconds(endTime));
+        waitOnAirSim = false;
         return;
     }
     

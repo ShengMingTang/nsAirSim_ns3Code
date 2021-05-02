@@ -32,16 +32,6 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("NS_AIRSIM");
 
-static int nRbs = 6; // see https://i.imgur.com/q55uR8T.png
-static uint TcpSndBufSize = 1024*50; // was 429496729
-static uint TcpRcvBufSize = 1024*50; // was 429496729
-static uint CqiTimerThreshold = 10;
-static double LteTxPower = 0;
-static bool useWifi = false;
-static std::string p2pDataRate("10Gb/s");
-static uint p2pMtu = 1500;
-static double p2pDelay = 1e-3; 
-
 NetConfig config;
 
 int main(int argc, char *argv[])
@@ -70,8 +60,8 @@ int main(int argc, char *argv[])
   // Config TCP socket
   // https://www.nsnam.org/doxygen/classns3_1_1_tcp_socket.html
   Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(config.segmentSize));
-  Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(TcpSndBufSize));
-  Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(TcpRcvBufSize));
+  Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(config.TcpSndBufSize));
+  Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(config.TcpRcvBufSize));
 
   
   // Packet level settings
@@ -115,12 +105,12 @@ int main(int argc, char *argv[])
   Config::SetDefault ("ns3::LteSpectrumPhy::CtrlErrorModelEnabled", BooleanValue (false));
   Config::SetDefault ("ns3::LteSpectrumPhy::DataErrorModelEnabled", BooleanValue (true));
   Config::SetDefault ("ns3::PfFfMacScheduler::HarqEnabled", BooleanValue (false));
-  Config::SetDefault ("ns3::PfFfMacScheduler::CqiTimerThreshold", UintegerValue (CqiTimerThreshold));
+  Config::SetDefault ("ns3::PfFfMacScheduler::CqiTimerThreshold", UintegerValue (config.CqiTimerThreshold));
   Config::SetDefault ("ns3::LteEnbRrc::EpsBearerToRlcMapping",EnumValue(LteEnbRrc::RLC_AM_ALWAYS));
-  Config::SetDefault ("ns3::LteEnbNetDevice::UlBandwidth", UintegerValue(nRbs));
-  Config::SetDefault ("ns3::LteEnbNetDevice::DlBandwidth", UintegerValue(nRbs));
+  Config::SetDefault ("ns3::LteEnbNetDevice::UlBandwidth", UintegerValue(config.nRbs));
+  Config::SetDefault ("ns3::LteEnbNetDevice::DlBandwidth", UintegerValue(config.nRbs));
   Config::SetDefault ("ns3::LteUePhy::EnableUplinkPowerControl", BooleanValue (false));
-  Config::SetDefault ("ns3::LteUePhy::TxPower", DoubleValue(LteTxPower));
+  Config::SetDefault ("ns3::LteUePhy::TxPower", DoubleValue(config.LteTxPower));
 
   NS_LOG_INFO("Setup LTE helper");
   Ptr<LteHelper> lteHelper = CreateObject<LteHelper>();
@@ -143,9 +133,9 @@ int main(int argc, char *argv[])
   
   // EPC
   PointToPointHelper p2ph;
-  p2ph.SetDeviceAttribute ("DataRate", DataRateValue (DataRate (p2pDataRate.c_str())));
-  p2ph.SetDeviceAttribute ("Mtu", UintegerValue (p2pMtu));
-  p2ph.SetChannelAttribute ("Delay", TimeValue (Seconds (p2pDelay)));
+  p2ph.SetDeviceAttribute ("DataRate", DataRateValue (DataRate (config.p2pDataRate.c_str())));
+  p2ph.SetDeviceAttribute ("Mtu", UintegerValue (config.p2pMtu));
+  p2ph.SetChannelAttribute ("Delay", TimeValue (Seconds (config.p2pDelay)));
   
   NetDeviceContainer pgwRemoteDevices = p2ph.Install (pgw, remoteHost);
   Ipv4AddressHelper ipv4h;

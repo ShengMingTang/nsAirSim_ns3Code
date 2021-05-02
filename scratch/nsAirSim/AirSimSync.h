@@ -80,7 +80,7 @@ private:
     zmq::socket_t zmqRecvSocket, zmqSendSocket;
     float updateGranularity;
     EventId event;
-    bool waitOnAirSIm = true;
+    bool waitOnAirSim = true;
 };
 std::istream& operator>>(istream & is, NetConfig &config);
 std::ostream& operator<<(ostream & os, const NetConfig &config);
