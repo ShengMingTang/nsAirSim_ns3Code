@@ -18,8 +18,6 @@
 #include "ns3/ipv4-flow-probe.h"
 // zmq includes
 #include <zmq.hpp>
-// json lib
-// #include "<nlohmann/json.hpp>"
 // custom includes
 #include "gcsApp.h"
 #include "uavApp.h"
@@ -51,10 +49,9 @@ int main(int argc, char *argv[])
   if(config.isUavLogEnabled) {LogComponentEnable("UavApp", LOG_LEVEL_INFO);}
   if(config.isCongLogEnabled) {LogComponentEnable("CongApp", LOG_LEVEL_INFO);}
   if(config.isSyncLogEnabled) {LogComponentEnable("AIRSIM_SYNC", LOG_LEVEL_INFO);}
-  NS_LOG_INFO(config);
 
+  NS_LOG_INFO("Use config:" << config);
   Time::SetResolution(Time::NS);
-  // GlobalValue::Bind ("SimulatorImplementationType", StringValue ("ns3::RealtimeSimulatorImpl"));
   
   // ==========================================================================
   // Config TCP socket

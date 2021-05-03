@@ -35,7 +35,6 @@ extern zmq::context_t context;
 #define UAV_APP_START_TIME (0.2)
 #define CONG_APP_START_TIME (UAV_APP_START_TIME)
 
-#define MAX_RECV_TIMEO (1000)
 #define CLEAN_UP_TIME (1.0)
 
 using namespace std;
@@ -50,14 +49,14 @@ struct NetConfig
     std::vector<string> uavsName;
     std::vector< std::vector<float> > initPostEnb;
     
-    int nRbs = 6; // see https://i.imgur.com/q55uR8T.png
-    uint TcpSndBufSize = 1024*50; // was 429496729
-    uint TcpRcvBufSize = 1024*50; // was 429496729
-    uint CqiTimerThreshold = 10;
-    double LteTxPower = 0;
+    int nRbs; // see https://i.imgur.com/q55uR8T.png
+    uint TcpSndBufSize; // was 429496729
+    uint TcpRcvBufSize; // was 429496729
+    uint CqiTimerThreshold;
+    double LteTxPower;
     std::string p2pDataRate = "10Gb/s";
-    uint p2pMtu = 1500;
-    double p2pDelay = 1e-3; 
+    uint p2pMtu;
+    double p2pDelay;
     int useWifi;
     
     int isMainLogEnabled;

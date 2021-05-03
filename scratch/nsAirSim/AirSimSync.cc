@@ -27,8 +27,10 @@ STRICT_MODE_ON
 #include "AirSimSync.h"
 
 using namespace std;
+extern NetConfig config;
 
 NS_LOG_COMPONENT_DEFINE("AIRSIM_SYNC");
+
 std::istream& operator>>(istream & is, NetConfig &config)
 {
     int numOfUav, numOfEnb;
@@ -60,7 +62,7 @@ std::istream& operator>>(istream & is, NetConfig &config)
 std::ostream& operator<<(ostream & os, const NetConfig &config)
 {
     os << "update granularity: " << config.updateGranularity << endl;
-    os << "seg size:" << config.segmentSize;
+    os << "seg size:" << config.segmentSize << endl;
     os << "numOfCong:" << config.numOfCong << " congRate:" << config.congRate << "congX:" << config.congX << " congY:" << config.congY << " congRho:" << config.congRho  << endl;
     
     // UAV names
@@ -101,11 +103,9 @@ void AirSimSync::readNetConfigFromAirSim(NetConfig &config)
     std::string s(static_cast<char*>(message.data()), message.size());
     std::istringstream ss(s);
     
-    NS_LOG_INFO("Config: " << (const char*)message.data());
-
     ss >> config;
     updateGranularity = config.updateGranularity;
-    zmqRecvSocket.setsockopt(ZMQ_RCVTIMEO, MAX_RECV_TIMEO);
+    zmqRecvSocket.setsockopt(ZMQ_RCVTIMEO, (int)(10*1000*config.updateGranularity));
 }
 void AirSimSync::startAirSim()
 {
@@ -131,8 +131,7 @@ void AirSimSync::takeTurn(Ptr<GcsApp> &gcsApp, std::vector< Ptr<UavApp> > &uavsA
     
     std::string s(static_cast<char*>(message.data()), message.size());
     std::size_t n = s.find("bye");
-    // This implied that a hard limit of 1 second for AirSim to run a period
-    // Run below if AirSim is believed to be done (it disconnects or it says bye)
+    // This implied that a hard limit of 10 times updateGranularity for AirSim to run a period
     if((!res.has_value() || res.value() < 0) || (n != std::string::npos)){
         if(event.IsRunning()){
             Simulator::Cancel(event);
