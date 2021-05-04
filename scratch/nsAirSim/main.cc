@@ -25,6 +25,27 @@
 #include "AirSimSync.h"
 #include "netMeasure.h"
 
+// LTE topology (useWifi=0)
+// 
+//  * = Enb  G=GCS  u=UAV
+// 
+//    ----------* ==========
+//   /          * |        |
+//  /  (7.0.0.0)* |      PGW (.2) --- 1.0.0.0 ---(.1) G
+// u   u -------* ==========
+// 
+//   | E-UTRAN  | |   EPC  | | GCS backend |
+
+// Wifi topology (useWifi=1)
+// 
+//  * = AP  G=GCS  u=UAV
+// 
+//   Wifi 10.1.1.0
+// *(0)---*(1)---------*(2)
+// |        \           \
+// G         \           \
+//            u(0)        u(1)
+
 using namespace std;
 using namespace ns3;
 
@@ -121,7 +142,7 @@ int main(int argc, char *argv[])
     initPosGcsAlloc->Add(Vector(config.initEnbApPos[0][0], config.initEnbApPos[0][1], config.initEnbApPos[0][2]));
     mobilityGcs.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
     mobilityGcs.SetPositionAllocator(initPosGcsAlloc);
-    mobilityGcs.Install (gcsNodes);
+    mobilityGcs.Install (gcsNode);
   }
 
   // EnbAp
@@ -147,7 +168,7 @@ int main(int argc, char *argv[])
   stack.Install(uavNodes);
   // Enb don't need protocol stack
   if(config.useWifi) {stack.Install(enbApNodes);}
-  stack.Install(gcsNodes);
+  stack.Install(gcsNode);
   stack.Install(congNodes);
 
   // ==========================================================================
@@ -242,7 +263,7 @@ int main(int argc, char *argv[])
     // GCS
     NS_LOG_INFO("Assign GCS interfaces");
     ipv4h.SetBase ("1.0.0.0", "255.0.0.0");
-    gcsIpfaces = ipv4h.Assign(gcsDevices.Get(0));
+    gcsIpfaces = ipv4h.Assign(gcsDevices);
     // @@ where does the "7.0.0.0" come from ? and 1 in AddNetworkRouteTo (only has 1 interface ?)
     gcsStaticRouting = ipv4RoutingHelper.GetStaticRouting (gcsNode->GetObject<Ipv4>());
     gcsStaticRouting->AddNetworkRouteTo (Ipv4Address ("7.0.0.0"), Ipv4Mask ("255.0.0.0"), 1);
