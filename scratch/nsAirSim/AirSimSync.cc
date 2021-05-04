@@ -93,7 +93,8 @@ AirSimSync::AirSimSync(zmq::context_t &context): event()
 }
 AirSimSync::~AirSimSync()
 {
-    ;
+    zmqRecvSocket.close();
+    zmqSendSocket.close();
 }
 
 void AirSimSync::readNetConfigFromAirSim(NetConfig &config)
@@ -125,28 +126,22 @@ void AirSimSync::takeTurn(Ptr<GcsApp> &gcsApp, std::vector< Ptr<UavApp> > &uavsA
     
     // AirSim's turn at time t
     // block until AirSim sends any (nofitied by AirSim)
-    if(waitOnAirSim){
-        res = zmqRecvSocket.recv(message, zmq::recv_flags::none);
-    }
+    res = zmqRecvSocket.recv(message, zmq::recv_flags::none);
     
     std::string s(static_cast<char*>(message.data()), message.size());
     std::size_t n = s.find("bye");
     // This implied that a hard limit of 10 times updateGranularity for AirSim to run a period
     if((!res.has_value() || res.value() < 0) || (n != std::string::npos)){
+        double endTime = 0.0;
         if(event.IsRunning()){
             Simulator::Cancel(event);
         }
-        double endTime = stod(s.substr(n+4)) - now + CLEAN_UP_TIME;
         zmqSendSocket.send(ntf, zmq::send_flags::dontwait);
-        zmqRecvSocket.close();
-        zmqSendSocket.close();
         gcsApp->SetStopTime(Seconds(endTime));
         for(auto &it:uavsApp){
             it->SetStopTime(Seconds(endTime));
         }
         Simulator::Stop(Seconds(endTime));
-        waitOnAirSim = false;
-        return;
     }
     
     // ns' turn at time t, AirSim at time t + 1
