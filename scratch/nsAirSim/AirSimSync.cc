@@ -45,9 +45,9 @@ std::istream& operator>>(istream & is, NetConfig &config)
     }
     // enb position parsing
     is >> numOfEnb;
-    config.initPostEnb = std::vector< std::vector<float> >(numOfEnb, std::vector<float>(3));
+    config.initEnbApPos = std::vector< std::vector<float> >(numOfEnb, std::vector<float>(3));
     for(int i = 0; i < numOfEnb; i++){
-        is >> config.initPostEnb[i][0] >> config.initPostEnb[i][1] >> config.initPostEnb[i][2];
+        is >> config.initEnbApPos[i][0] >> config.initEnbApPos[i][1] >> config.initEnbApPos[i][2];
     }
 
     // net config group
@@ -73,8 +73,8 @@ std::ostream& operator<<(ostream & os, const NetConfig &config)
     os << endl;
     // Enbs
     os << "Enb pos:"  << endl;
-    for(int i = 0; i < config.initPostEnb.size(); i++){
-        os << i << "(" << config.initPostEnb[i][0] << ", " << config.initPostEnb[i][1] << ", " << config.initPostEnb[i][2] << ")"  << endl;
+    for(int i = 0; i < config.initEnbApPos.size(); i++){
+        os << i << "(" << config.initEnbApPos[i][0] << ", " << config.initEnbApPos[i][1] << ", " << config.initEnbApPos[i][2] << ")"  << endl;
     }
 
     os << "nRbs: " << config.nRbs << ", TcpSndBufSize:" << config.TcpSndBufSize << ", TcpRcvBufSize:" << config.TcpRcvBufSize << endl;

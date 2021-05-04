@@ -47,7 +47,7 @@ struct NetConfig
     float congRate;
     float congX, congY, congRho;
     std::vector<string> uavsName;
-    std::vector< std::vector<float> > initPostEnb;
+    std::vector< std::vector<float> > initEnbApPos;
     
     int nRbs; // see https://i.imgur.com/q55uR8T.png
     uint TcpSndBufSize; // was 429496729

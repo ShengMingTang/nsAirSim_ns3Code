@@ -51,6 +51,11 @@ int main(int argc, char *argv[])
   if(config.isSyncLogEnabled) {LogComponentEnable("AIRSIM_SYNC", LOG_LEVEL_INFO);}
 
   NS_LOG_INFO("Use config:" << config);
+
+  if(config.initEnbApPos.size() == 0){
+    NS_FATAL_ERROR("initEnbApPos should have at least length 1 but got " << config.initEnbApPos.size());
+  }
+
   Time::SetResolution(Time::NS);
   
   // ==========================================================================
@@ -87,7 +92,7 @@ int main(int argc, char *argv[])
   uavNodes.Create(config.uavsName.size());
   gcsNodes.Create(1);
   gcsNode = gcsNodes.Get (0); // GCS (later be installed with pgw) | 
-  enbApNodes.Create(config.initPostEnb.size()); // position shared
+  enbApNodes.Create(config.initEnbApPos.size()); // position shared
   congNodes.Create(config.numOfCong);
   
   // ==========================================================================
@@ -113,8 +118,7 @@ int main(int argc, char *argv[])
   // GCS
   // it has mobility only if in Wifi mode
   if(config.useWifi){
-    // @@ where should be GCS placed ?
-    initPosGcsAlloc->Add(Vector(0, 0, 0));
+    initPosGcsAlloc->Add(Vector(config.initEnbApPos[0][0], config.initEnbApPos[0][1], config.initEnbApPos[0][2]));
     mobilityGcs.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
     mobilityGcs.SetPositionAllocator(initPosGcsAlloc);
     mobilityGcs.Install (gcsNodes);
@@ -122,7 +126,7 @@ int main(int argc, char *argv[])
 
   // EnbAp
   for(int i = 0; i < enbApNodes.GetN(); i++){
-    initPosEnbApAlloc->Add(Vector(config.initPostEnb[i][0], config.initPostEnb[i][1], config.initPostEnb[i][2]));
+    initPosEnbApAlloc->Add(Vector(config.initEnbApPos[i][0], config.initEnbApPos[i][1], config.initEnbApPos[i][2]));
   }
   mobilityEnbAp.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
   mobilityEnbAp.SetPositionAllocator(initPosEnbApAlloc);
@@ -141,14 +145,15 @@ int main(int argc, char *argv[])
   InternetStackHelper stack;
   NS_LOG_INFO("Install Internet stacks");
   stack.Install(uavNodes);
-  // EnbAp don't need protocol stack
+  // Enb don't need protocol stack
+  if(config.useWifi) {stack.Install(enbApNodes);}
   stack.Install(gcsNodes);
   stack.Install(congNodes);
 
   // ==========================================================================
   // Netdevice containers
   NetDeviceContainer uavDevices;
-  NetDeviceContainer gcsDevices; // GCS + PGW (LTE) | GCS (Wifi)
+  NetDeviceContainer gcsDevices; // GCS + PGW (LTE) | GCS + first AP (Wifi)
   NetDeviceContainer enbApDevices;
   NetDeviceContainer congDevices;
   /* LTE */
@@ -164,6 +169,9 @@ int main(int argc, char *argv[])
   WifiMacHelper mac;
   Ssid ssid = Ssid ("ns-3-ssid");
   
+  p2ph.SetDeviceAttribute ("DataRate", DataRateValue (DataRate (config.p2pDataRate.c_str())));
+  p2ph.SetDeviceAttribute ("Mtu", UintegerValue (config.p2pMtu));
+  p2ph.SetChannelAttribute ("Delay", TimeValue (Seconds (config.p2pDelay)));
 
   if(!config.useWifi){ /* LTE */
     NS_LOG_INFO("Setup LTE helper");
@@ -179,9 +187,6 @@ int main(int argc, char *argv[])
     enbApDevices = lteHelper->InstallEnbDevice(enbApNodes);
     
     uavDevices = lteHelper->InstallUeDevice(uavNodes);
-    p2ph.SetDeviceAttribute ("DataRate", DataRateValue (DataRate (config.p2pDataRate.c_str())));
-    p2ph.SetDeviceAttribute ("Mtu", UintegerValue (config.p2pMtu));
-    p2ph.SetChannelAttribute ("Delay", TimeValue (Seconds (config.p2pDelay)));
     gcsDevices = p2ph.Install(gcsNode, pgwNode);
     congDevices = lteHelper->InstallUeDevice(congNodes);
   }
@@ -195,10 +200,11 @@ int main(int argc, char *argv[])
     uavDevices = wifi.Install(phy, mac, uavNodes);
     gcsDevices = wifi.Install(phy, mac, gcsNodes);
     congDevices = wifi.Install(phy, mac, congNodes);
-
+   
     mac.SetType ("ns3::ApWifiMac",
                "Ssid", SsidValue (ssid));
-    enbApDevices = wifi.Install(phy, mac, enbApNodes);  
+    enbApDevices = wifi.Install(phy, mac, enbApNodes);
+
   }
   
   // ==========================================================================
@@ -206,7 +212,7 @@ int main(int argc, char *argv[])
   Ipv4AddressHelper ipv4h;
 
   Ipv4InterfaceContainer uavIpfaces;
-  Ipv4InterfaceContainer gcsIpfaces;
+  Ipv4InterfaceContainer gcsIpfaces; // GCS only 
   Ipv4InterfaceContainer enbApIpfaces;
   Ipv4InterfaceContainer congIpfaces;
 
@@ -236,7 +242,7 @@ int main(int argc, char *argv[])
     // GCS
     NS_LOG_INFO("Assign GCS interfaces");
     ipv4h.SetBase ("1.0.0.0", "255.0.0.0");
-    gcsIpfaces = ipv4h.Assign(gcsDevices);
+    gcsIpfaces = ipv4h.Assign(gcsDevices.Get(0));
     // @@ where does the "7.0.0.0" come from ? and 1 in AddNetworkRouteTo (only has 1 interface ?)
     gcsStaticRouting = ipv4RoutingHelper.GetStaticRouting (gcsNode->GetObject<Ipv4>());
     gcsStaticRouting->AddNetworkRouteTo (Ipv4Address ("7.0.0.0"), Ipv4Mask ("255.0.0.0"), 1);
@@ -264,8 +270,9 @@ int main(int argc, char *argv[])
   else{ /* Wifi */
   NS_LOG_INFO("Assign Wifi IP interfaces");
     ipv4h.SetBase("10.1.1.0", "255.255.255.0");
+    // to keep it address in front of uavs'
+    gcsIpfaces = ipv4h.Assign(gcsDevices.Get(0));
     uavIpfaces = ipv4h.Assign(uavDevices);
-    gcsIpfaces = ipv4h.Assign(gcsDevices); // to keep it address in front of uavs'
     congIpfaces = ipv4h.Assign(congDevices);
   }
 
