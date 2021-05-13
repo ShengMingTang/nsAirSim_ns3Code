@@ -106,7 +106,7 @@ void AirSimSync::readNetConfigFromAirSim(NetConfig &config)
     
     ss >> config;
     updateGranularity = config.updateGranularity;
-    zmqRecvSocket.setsockopt(ZMQ_RCVTIMEO, (int)(10*1000*config.updateGranularity));
+    zmqRecvSocket.setsockopt(ZMQ_RCVTIMEO, (int)(1000*1000*config.updateGranularity));
 }
 void AirSimSync::startAirSim()
 {
@@ -140,6 +140,15 @@ void AirSimSync::takeTurn(Ptr<GcsApp> &gcsApp, std::vector< Ptr<UavApp> > &uavsA
         gcsApp->SetStopTime(Seconds(endTime));
         for(auto &it:uavsApp){
             it->SetStopTime(Seconds(endTime));
+        }
+        if(n == std::string::npos){
+            NS_LOG_INFO("Termination triggered by timeout");
+        }
+        if(!res.has_value()){
+            NS_LOG_INFO("Termination triggered by has_value() is false");
+        }
+        if(res.has_value() && res.value() < 0){
+            NS_LOG_INFO("Termination triggered by res value " << res.value());
         }
         Simulator::Stop(Seconds(endTime));
     }
