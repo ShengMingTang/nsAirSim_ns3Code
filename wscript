@@ -429,7 +429,6 @@ def configure(conf):
     conf.check_cxx(lib='MavLinkCom')
     conf.check_cxx(lib='zmq')
     
-    conf.check_cfg(package='nlohmann_json')
     # @@added
 
     # attach some extra methods
