@@ -23,7 +23,6 @@
 #include "uavApp.h"
 #include "congApp.h"
 #include "AirSimSync.h"
-#include "netMeasure.h"
 
 // LTE topology (useWifi=0)
 // 
