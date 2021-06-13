@@ -106,7 +106,8 @@ void AirSimSync::readNetConfigFromAirSim(NetConfig &config)
     
     ss >> config;
     updateGranularity = config.updateGranularity;
-    zmqRecvSocket.setsockopt(ZMQ_RCVTIMEO, (int)(1000*1000*config.updateGranularity));
+    // rm timeout
+    // zmqRecvSocket.setsockopt(ZMQ_RCVTIMEO, (int)(1000*1000*config.updateGranularity));
 }
 void AirSimSync::startAirSim()
 {
