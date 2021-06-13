@@ -370,7 +370,7 @@ def configure(conf):
     # AIRSIM_ROOT = '/home/shengming/AirSim/'
     AIRSIM_ROOT = os.getenv('AIRSIM_ROOT')
     print(f'using AIRSIM_ROOT as {AIRSIM_ROOT}')
-    RPCLIB_VERSION_FOLDER='rpclib-2.2.1'
+    RPCLIB_VERSION_FOLDER='rpclib-2.3.0'
     
     conf.load('compiler_c')
     conf.load('compiler_cxx')
